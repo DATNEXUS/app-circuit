@@ -77,13 +77,13 @@ if st.button("🚀 Processar Lote e Gerar CSV", use_container_width=True):
                         if not bairro_atual:
                             bairro_atual = re.sub(r',?\s*CEP.*', '', linha_limpa, flags=re.IGNORECASE).strip()
                     
-                    # 3. Identifica a Quantidade de volumes
-                    if "unidade" in linha_lower or "vol" in Hardcoded_Check := linha_lower:
+                    # 3. Identifica a Quantidade de volumes (Linha corrigida sem o erro de sintaxe)
+                    if "unidade" in linha_lower or "vol" in linha_lower:
                         match_qtd = re.search(r'(\d+)', linha_limpa)
                         if match_qtd:
                             qtd_atual = match_qtd.group(1)
                     
-                    # 4. Identifica o código da etiqueta (busca os 2 últimos dígitos de números longos com sublinhado ou hífen)
+                    # 4. Identifica o código da etiqueta (busca os 2 últimos dígitos de números de etiqueta)
                     if "_" in linha_limpa or len(re.sub(r'\D', '', linha_limpa)) >= 6:
                         match_etiq = re.search(r'(\d+)', linha_limpa)
                         if match_etiq:
