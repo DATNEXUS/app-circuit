@@ -4,31 +4,40 @@ import re
 from PIL import Image
 import pytesseract
 
-st.set_page_config(page_title="Leitor Leve Celular", layout="centered", page_icon="📱")
+st.set_page_config(page_title="Leitor de Rotas", layout="centered", page_icon="📱")
 
 st.title("📱 Leitor de Prints para Roteiros")
-st.write("Suba um print por vez para acumular e gerar sua lista do Circuit.")
+st.write("Selecione vários prints da sua galeria de uma vez só.")
 
-# Inicializa a lista de paradas na memória se ela não existir
+# Configura o Tesseract para usar os caminhos corretos do servidor Linux
+import shutil
+pytesseract.pytesseract.tesseract_cmd = shutil.which("tesseract")
+
+# Inicializa a lista de paradas na memória
 if 'lista_paradas' not in st.session_state:
     st.session_state.lista_paradas = []
 
-# Upload simples e leve para celular
-arquivo_print = st.file_uploader("Selecione um print da Galeria:", type=["png", "jpg", "jpeg"])
+# Ativado para selecionar multiplas fotos de uma vez só na galeria do celular
+arquivos_prints = st.file_uploader("Escolha os prints das ruas:", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
 
-if arquivo_print:
-    if st.button("➕ Adicionar esta Imagem à Lista", use_container_width=True):
-        try:
-            with st.spinner("📖 Processando imagem instantaneamente..."):
-                imagem = Image.open(arquivo_print)
+if st.button("🚀 Processar Imagens e Gerar CSV", use_container_width=True):
+    if arquivos_prints:
+        # Limpa o histórico anterior para gerar uma lista nova limpa
+        st.session_state.lista_paradas = []
+        
+        barra_progresso = st.progress(0)
+        total = len(arquivos_prints)
+        
+        for i, arquivo in enumerate(arquivos_prints):
+            try:
+                imagem = Image.open(arquivo)
                 
-                # Executa o leitor leve nativo do servidor em português
+                # Executa a leitura em português
                 texto_completo = pytesseract.image_to_string(imagem, lang='por')
                 
                 # Divide o texto do print pelas seções de cada entrega
                 blocos = texto_completo.split("Estou chegando")
                 
-                contador_locais = 0
                 for bloco in blocos:
                     linhas = [l.strip() for l in bloco.split("\n") if l.strip()]
                     if len(linhas) >= 2:
@@ -56,20 +65,21 @@ if arquivo_print:
                             "First Name": f"Final: {final_etiq}",
                             "Notes": f"Qtd: {qtd} vol"
                         })
-                        contador_locais += 1
-                
-                if contador_locais > 0:
-                    st.success(f"✓ Mais {contador_locais} endereços adicionados com sucesso!")
-                else:
-                    st.warning("Texto lido, mas nenhum endereço padrão foi identificado. Tente outro print.")
-        except Exception as e:
-            st.error(f"Erro ao processar imagem: {e}")
+            except Exception as e:
+                continue
+            
+            barra_progresso.progress((i + 1) / total)
+
+        if st.session_state.lista_paradas:
+            st.success(f"✓ Sucesso! {len(st.session_state.lista_paradas)} paradas encontradas nos prints.")
+        else:
+            st.error("Nenhum endereço foi reconhecido. Verifique se as imagens estão nítidas.")
+    else:
+        st.warning("Selecione as imagens antes de processar.")
 
 # --- EXIBIÇÃO DO ACUMULADO DO DIA ---
 if st.session_state.lista_paradas:
     st.write("---")
-    st.subheader(f"📋 Lista Acumulada ({len(st.session_state.lista_paradas)} paradas)")
-    
     df_final = pd.DataFrame(st.session_state.lista_paradas)
     st.dataframe(df_final, use_container_width=True)
     
@@ -77,11 +87,7 @@ if st.session_state.lista_paradas:
     st.download_button(
         label="📥 Baixar CSV Completo para o Circuit",
         data=csv_data,
-        file_name="roteiro_acumulado_circuit.csv",
+        file_name="roteiro_diario_circuit.csv",
         mime="text/csv",
         use_container_width=True
     )
-    
-    if st.button("🗑️ Limpar Lista Atual", type="secondary", use_container_width=True):
-        st.session_state.lista_paradas = []
-        st.st.rerun()
