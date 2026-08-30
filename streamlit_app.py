@@ -93,7 +93,7 @@ if st.session_state.lista_paradas:
         use_container_width=True
     )
     
-    # Botão auxiliar para limpar a lista e começar um novo dia de trabalho
-    if st.button("🗑️ Limpar Lista Atual", type="inverse", use_container_width=True):
+    # Botão auxiliar corrigido para o padrão secundário aceito pelo Streamlit
+    if st.button("🗑️ Limpar Lista Atual", type="secondary", use_container_width=True):
         st.session_state.lista_paradas = []
         st.rerun()
