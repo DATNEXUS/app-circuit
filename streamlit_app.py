@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import google.generativeai as genai
@@ -8,12 +7,33 @@ import json
 st.set_page_config(page_title="Leitor de Rotas - Circuit", page_icon="🚚", layout="centered")
 
 st.title("🚚 Meu Leitor de Etiquetas")
-st.write("Transforme prints de entrega no arquivo correto para o Circuit instantaneamente.")
+st.write("Transforme seus prints de entrega no arquivo correto para o Circuit.")
 
+# Campo para salvar a chave do Google
 api_key = st.text_input("Cole sua Gemini API Key aqui:", type="password")
-uploaded_files = st.file_uploader("Selecione ou tire foto dos prints:", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
 
-if uploaded_files:
+st.markdown("---")
+st.subheader("📸 Forma 1: Enviar um arquivo por vez")
+# Primeiro campo caso seu celular só aceite selecionar 1 arquivo
+uploaded_file = st.file_uploader("Escolha o print 1:", type=["png", "jpg", "jpeg"], key="file1")
+uploaded_file2 = st.file_uploader("Escolha o print 2 (Opcional):", type=["png", "jpg", "jpeg"], key="file2")
+uploaded_file3 = st.file_uploader("Escolha o print 3 (Opcional):", type=["png", "jpg", "jpeg"], key="file3")
+uploaded_file4 = st.file_uploader("Escolha o print 4 (Opcional):", type=["png", "jpg", "jpeg"], key="file4")
+
+st.markdown("---")
+st.subheader("📂 Forma 2: Enviar múltiplos arquivos juntos")
+# Segundo campo (se o seu navegador liberar a seleção múltipla)
+uploaded_multiple = st.file_uploader("Selecione os 4 prints juntos aqui:", type=["png", "jpg", "jpeg"], accept_multiple_files=True, key="multiple")
+
+# Junta todos os arquivos que foram colocados em qualquer uma das duas opções
+all_uploaded_files = []
+if uploaded_file: all_uploaded_files.append(uploaded_file)
+if uploaded_file2: all_uploaded_files.append(uploaded_file2)
+if uploaded_file3: all_uploaded_files.append(uploaded_file3)
+if uploaded_file4: all_uploaded_files.append(uploaded_file4)
+if uploaded_multiple: all_uploaded_files.extend(uploaded_multiple)
+
+if all_uploaded_files:
     if not api_key:
         st.error("⚠️ Você precisa colar sua API Key no campo acima primeiro!")
     else:
@@ -21,8 +41,8 @@ if uploaded_files:
         model = genai.GenerativeModel('gemini-3.6-flash')
         all_rows = []
         
-        with st.spinner("🧠 Lendo os prints... Aguarde."):
-            for index, file in enumerate(uploaded_files):
+        with st.spinner("🧠 Lendo as imagens... Aguarde."):
+            for index, file in enumerate(all_uploaded_files):
                 image = Image.open(file)
                 
                 prompt = """
@@ -58,7 +78,7 @@ if uploaded_files:
         
         if all_rows:
             df = pd.DataFrame(all_rows)
-            st.success("✅ Processado com sucesso!")
+            st.success("✅ Todos os arquivos processados com sucesso!")
             st.dataframe(df)
             
             csv_data = df.to_csv(index=False, sep=',').encode('utf-8')
@@ -68,3 +88,4 @@ if uploaded_files:
                 file_name="lista_etiqueta_no_endereco.csv",
                 mime="text/csv"
             )
+
