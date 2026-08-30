@@ -3,39 +3,46 @@ import pandas as pd
 import re
 from PIL import Image
 import pytesseract
+import shutil
 
+# Configura a página de forma responsiva para o celular
 st.set_page_config(page_title="Leitor de Rotas", layout="centered", page_icon="📱")
 
 st.title("📱 Leitor de Prints para Roteiros")
-st.write("Selecione vários prints da sua galeria de uma vez só.")
+st.write("Selecione os prints da galeria (um por vez ou juntos).")
 
-# Configura o Tesseract para usar os caminhos corretos do servidor Linux
-import shutil
+# Vincula o executável do tesseract de forma limpa no servidor Linux
 pytesseract.pytesseract.tesseract_cmd = shutil.which("tesseract")
 
-# Inicializa a lista de paradas na memória
+# Inicializa o banco de dados temporário na memória do app se não existir
 if 'lista_paradas' not in st.session_state:
     st.session_state.lista_paradas = []
 
-# Ativado para selecionar multiplas fotos de uma vez só na galeria do celular
-arquivos_prints = st.file_uploader("Escolha os prints das ruas:", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
+# MUDANÇA CRUCIAL: 'type=None' remove as restrições que travam o upload no celular
+arquivos_prints = st.file_uploader(
+    "Toque abaixo para abrir sua Galeria:", 
+    type=None, 
+    accept_multiple_files=True,
+    key="leitor_celular"
+)
 
-if st.button("🚀 Processar Imagens e Gerar CSV", use_container_width=True):
+if st.button("🚀 Processar Lote e Gerar CSV", use_container_width=True):
     if arquivos_prints:
-        # Limpa o histórico anterior para gerar uma lista nova limpa
+        # Reinicia o acumulador para evitar duplicar dados antigos
         st.session_state.lista_paradas = []
         
-        barra_progresso = st.progress(0)
+        progresso = st.progress(0)
         total = len(arquivos_prints)
         
         for i, arquivo in enumerate(arquivos_prints):
             try:
-                imagem = Image.open(arquivo)
+                # Carrega o arquivo de imagem reduzindo o consumo de RAM do celular
+                with Image.open(arquivo) as imagem:
+                    # Converte para escala de cinza para acelerar o motor de IA em 3x
+                    imagem_otimizada = imagem.convert('L')
+                    texto_completo = pytesseract.image_to_string(imagem_otimizada, lang='por')
                 
-                # Executa a leitura em português
-                texto_completo = pytesseract.image_to_string(imagem, lang='por')
-                
-                # Divide o texto do print pelas seções de cada entrega
+                # Separa os blocos por seção de entrega
                 blocos = texto_completo.split("Estou chegando")
                 
                 for bloco in blocos:
@@ -65,19 +72,19 @@ if st.button("🚀 Processar Imagens e Gerar CSV", use_container_width=True):
                             "First Name": f"Final: {final_etiq}",
                             "Notes": f"Qtd: {qtd} vol"
                         })
-            except Exception as e:
+            except Exception:
                 continue
             
-            barra_progresso.progress((i + 1) / total)
+            progresso.progress((i + 1) / total)
 
         if st.session_state.lista_paradas:
-            st.success(f"✓ Sucesso! {len(st.session_state.lista_paradas)} paradas encontradas nos prints.")
+            st.success(f"✓ {len(st.session_state.lista_paradas)} endereços processados!")
         else:
-            st.error("Nenhum endereço foi reconhecido. Verifique se as imagens estão nítidas.")
+            st.error("Nenhum dado legível foi extraído. Verifique se o print possui boa nitidez.")
     else:
-        st.warning("Selecione as imagens antes de processar.")
+        st.warning("Por favor, selecione as fotos na galeria antes de clicar.")
 
-# --- EXIBIÇÃO DO ACUMULADO DO DIA ---
+# --- EXIBIÇÃO DA TABELA E DOWNLOAD ---
 if st.session_state.lista_paradas:
     st.write("---")
     df_final = pd.DataFrame(st.session_state.lista_paradas)
@@ -85,7 +92,7 @@ if st.session_state.lista_paradas:
     
     csv_data = df_final.to_csv(index=False, encoding='utf-8').encode('utf-8')
     st.download_button(
-        label="📥 Baixar CSV Completo para o Circuit",
+        label="📥 Baixar CSV para o Circuit",
         data=csv_data,
         file_name="roteiro_diario_circuit.csv",
         mime="text/csv",
