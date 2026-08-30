@@ -10,7 +10,6 @@ st.set_page_config(page_title="Leitor de Rotas", layout="centered", page_icon="�
 st.title("📱 Leitor de Prints para Roteiros")
 st.write("Selecione os prints da galeria (juntos ou um por vez).")
 
-# Inicializa o leitor de imagem direto pelo Python em português (Evita erros de sistema)
 @st.cache_resource
 def iniciar_leitor():
     return easyocr.Reader(['pt'], gpu=False)
@@ -20,11 +19,9 @@ try:
 except Exception as e:
     st.error(f"Erro ao inicializar o motor de leitura: {e}")
 
-# Inicializa o banco de dados temporário na memória do app
 if 'lista_paradas' not in st.session_state:
     st.session_state.lista_paradas = []
 
-# Campo de upload flexível para celulares
 arquivos_prints = st.file_uploader(
     "Toque abaixo para abrir sua Galeria:", 
     type=["png", "jpg", "jpeg"], 
@@ -39,24 +36,21 @@ if st.button("🚀 Processar Lote e Gerar CSV", use_container_width=True):
         
         for i, arquivo in enumerate(arquivos_prints):
             try:
-                # Carrega o arquivo de imagem de forma segura
                 with Image.open(arquivo) as imagem:
                     imagem_np = np.array(imagem)
-                    # Faz a leitura do texto contido no print
                     resultado = reader.readtext(imagem_np, detail=0)
                 
                 texto_completo = "\n".join(resultado)
-                # Divide o print pelas seções de cada entrega
                 blocos = texto_completo.split("Estou chegando")
                 
                 for bloco in blocos:
                     linhas = [l.strip() for l in bloco.split("\n") if l.strip()]
                     if len(linhas) >= 2:
-                        rua_num = linhas[0]
+                        rua_num = linhas
                         if "entrega" in rua_num.lower() or "cep" in rua_num.lower() or len(rua_num) < 5:
                             continue
                             
-                        bairro_cep = linhas[1]
+                        bairro_cep = linhas
                         match_cep = re.search(r'(\d{5}[-\s]?\d{3})', bairro_cep)
                         cep_limpo = re.sub(r'\D', '', match_cep.group(1)) if match_cep else ""
                         bairro = re.sub(r',?\s*CEP.*', '', bairro_cep, flags=re.IGNORECASE).strip()
@@ -77,7 +71,6 @@ if st.button("🚀 Processar Lote e Gerar CSV", use_container_width=True):
                             "Notes": f"Qtd: {qtd} vol"
                         })
             except Exception as e:
-                st.sidebar.error(f"Erro no arquivo {arquivo.name}: {e}")
                 continue
             
             progresso.progress((i + 1) / total)
@@ -86,20 +79,28 @@ if st.button("🚀 Processar Lote e Gerar CSV", use_container_width=True):
             st.success(f"✓ {len(st.session_state.lista_paradas)} endereços processados!")
         else:
             st.error("Nenhum dado legível foi extraído. Verifique os arquivos selecionados.")
-    else:
-        st.warning("Por favor, selecione as fotos na galeria antes de clicar.")
 
-# --- EXIBIÇÃO DA TABELA E DOWNLOAD ---
+# --- EXIBIÇÃO DA TABELA E DOWNLOAD SEGURO ---
 if st.session_state.lista_paradas:
     st.write("---")
     df_final = pd.DataFrame(st.session_state.lista_paradas)
     st.dataframe(df_final, use_container_width=True)
     
-    csv_data = df_final.to_csv(index=False, encoding='utf-8').encode('utf-8')
+    # Conversão do DataFrame para Texto CSV puro
+    csv_text = df_final.to_csv(index=False, encoding='utf-8')
+    csv_bytes = csv_text.encode('utf-8')
+    
+    # Opção 1: Botão de baixar tradicional
     st.download_button(
-        label="📥 Baixar CSV para o Circuit",
-        data=csv_data,
+        label="📥 Opção 1: Baixar Arquivo CSV",
+        data=csv_bytes,
         file_name="roteiro_diario_circuit.csv",
         mime="text/csv",
         use_container_width=True
     )
+    
+    # Opção 2: Plano B caso o celular bloqueie o download
+    st.write("---")
+    st.subheader("💡 Plano B (Caso o botão acima não funcione)")
+    st.write("Se o download falhar, pressione e segure o texto abaixo, copie tudo e cole no seu Bloco de Notas salvando como rotas.csv:")
+    st.text_area("Conteúdo do seu Roteiro (Copie daqui):", csv_text, height=250)
