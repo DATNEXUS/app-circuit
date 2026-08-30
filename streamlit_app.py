@@ -17,7 +17,7 @@ if uploaded_files:
         st.error("⚠️ Você precisa colar sua API Key no campo acima primeiro!")
     else:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-3.6-flash')
         all_rows = []
         
         with st.spinner("🧠 Lendo os prints... Aguarde."):
