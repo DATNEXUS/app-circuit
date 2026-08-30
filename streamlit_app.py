@@ -1,90 +1,99 @@
 import streamlit as st
 import pandas as pd
-import google.generativeai as genai
+import re
 from PIL import Image
-import json
+import numpy as np
+import easyocr
 
-st.set_page_config(page_title="Leitor de Rotas - Circuit", page_icon="🚚", layout="centered")
+# Configuração da página para visualização perfeita no celular
+st.set_page_config(page_title="Leitor de Prints", layout="centered", page_icon="📱")
 
-st.title("🚚 Meu Leitor de Etiquetas")
-st.write("Transforme seus prints de entrega no arquivo correto para o Circuit.")
+st.title("📱 Leitor de Prints para Circuit")
+st.write("Selecione os prints da sua galeria para gerar o roteiro.")
 
-# Campo para salvar a chave do Google
-api_key = st.text_input("Cole sua Gemini API Key aqui:", type="password")
+# Inicializa o leitor de imagem (OCR) em português
+@st.cache_resource
+def iniciar_leitor():
+    return easyocr.Reader(['pt'])
 
-st.markdown("---")
-st.subheader("📸 Forma 1: Enviar um arquivo por vez")
-# Primeiro campo caso seu celular só aceite selecionar 1 arquivo
-uploaded_file = st.file_uploader("Escolha o print 1:", type=["png", "jpg", "jpeg"], key="file1")
-uploaded_file2 = st.file_uploader("Escolha o print 2 (Opcional):", type=["png", "jpg", "jpeg"], key="file2")
-uploaded_file3 = st.file_uploader("Escolha o print 3 (Opcional):", type=["png", "jpg", "jpeg"], key="file3")
-uploaded_file4 = st.file_uploader("Escolha o print 4 (Opcional):", type=["png", "jpg", "jpeg"], key="file4")
+reader = iniciar_leitor()
 
-st.markdown("---")
-st.subheader("📂 Forma 2: Enviar múltiplos arquivos juntos")
-# Segundo campo (se o seu navegador liberar a seleção múltipla)
-uploaded_multiple = st.file_uploader("Selecione os 4 prints juntos aqui:", type=["png", "jpg", "jpeg"], accept_multiple_files=True, key="multiple")
+# Botão adaptado para o celular (abre a galeria de fotos ou a câmera do aparelho)
+arquivos_prints = st.file_uploader(
+    "Escolha os prints das etiquetas:", 
+    type=["png", "jpg", "jpeg"], 
+    accept_multiple_files=True
+)
 
-# Junta todos os arquivos que foram colocados em qualquer uma das duas opções
-all_uploaded_files = []
-if uploaded_file: all_uploaded_files.append(uploaded_file)
-if uploaded_file2: all_uploaded_files.append(uploaded_file2)
-if uploaded_file3: all_uploaded_files.append(uploaded_file3)
-if uploaded_file4: all_uploaded_files.append(uploaded_file4)
-if uploaded_multiple: all_uploaded_files.extend(uploaded_multiple)
-
-if all_uploaded_files:
-    if not api_key:
-        st.error("⚠️ Você precisa colar sua API Key no campo acima primeiro!")
-    else:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-3.6-flash')
-        all_rows = []
+if st.button("🚀 Gerar CSV para o Circuit", use_container_width=True):
+    if arquivos_prints:
+        lista_enderecos = []
+        lista_finais_etiqueta = []
+        lista_quantidades = []
         
-        with st.spinner("🧠 Lendo as imagens... Aguarde."):
-            for index, file in enumerate(all_uploaded_files):
-                image = Image.open(file)
-                
-                prompt = """
-                Analise a imagem deste print de entrega e extraia as informações de endereço logístico.
-                Você deve retornar a resposta estritamente no formato JSON, contendo uma lista de objetos.
-                Cada objeto deve ter exatamente estas 4 chaves textuais: "Address", "Complement", "Packages", "Notes".
-                
-                Regras de preenchimento rígidas:
-                1. "Address": Deve conter Nome da Rua, Número, Bairro, a cidade "Sao Bernardo do Campo - SP" e o CEP contendo apenas números (sem traço). Se o CEP do print for da Rua Castro, use obrigatoriamente 09850018. Exemplo: Rua Castro 25, Dos Casa, Sao Bernardo do Campo - SP, 09850018
-                2. "Complement": Se houver informação de condomínio, bloco ou ponto de referência comercial, coloque TEXTO EM CAIXA ALTA. Caso contrário, deixe vazio ""
-                3. "Packages": Coloque apenas o número isolado da quantidade de pacotes daquele endereço. Exemplo: 1
-                4. "Notes": Deve conter estritamente a frase neste padrão e em CAIXA ALTA: ETIQUETA: XX - QTD: X (Substitua XX pelos dois últimos dígitos da etiqueta do pacote e X pela quantidade).
-                
-                Retorne apenas o JSON puro, sem marcações markdown de código.
-                """
-                
-                try:
-                    response = model.generate_content([prompt, image])
-                    raw_text = response.text.strip()
-                    
-                    if raw_text.startswith("```json"):
-                        raw_text = raw_text.replace("```json", "").replace("```", "").strip()
-                    elif raw_text.startswith("```"):
-                        raw_text = raw_text.replace("```", "").strip()
-                        
-                    data_json = json.loads(raw_text)
-                    if isinstance(data_json, list):
-                        all_rows.extend(data_json)
-                    else:
-                        all_rows.append(data_json)
-                except Exception as e:
-                    st.error(f"Erro ao ler o print {index+1}: {e}")
+        barra_progresso = st.progress(0)
+        total = len(arquivos_prints)
         
-        if all_rows:
-            df = pd.DataFrame(all_rows)
-            st.success("✅ Todos os arquivos processados com sucesso!")
-            st.dataframe(df)
+        for i, arquivo in enumerate(arquivos_prints):
+            try:
+                # Abre a imagem da galeria do celular
+                imagem = Image.open(arquivo)
+                imagem_np = np.array(imagem)
+                
+                # Extrai o texto do print de tela
+                resultado = reader.readtext(imagem_np, detail=0)
+                texto_print = " ".join(resultado)
+                
+                # Procura os dados específicos (Endereço, CEP, Qtd, Etiqueta)
+                end_match = re.search(r'(?:Endereço|Rua|Logradouro|Local):\s*(.*?)(?:CEP|$)', texto_print, re.IGNORECASE)
+                endereco = end_match.group(1).strip() if end_match else "Endereço não identificado"
+                
+                cep_match = re.search(r'CEP[:\s]*([\d\s-]+)', texto_print, re.IGNORECASE)
+                cep_limpo = re.sub(r'\D', '', cep_match.group(1)) if cep_match else ""
+                
+                qtd_match = re.search(r'(?:Quantidade|Qtd|Pacotes|Volumes):\s*(\d+)', texto_print, re.IGNORECASE)
+                quantidade = qtd_match.group(1) if qtd_match else "1"
+                
+                etiq_match = re.search(r'(?:Etiqueta|Nº|Código):\s*(\d+)', texto_print, re.IGNORECASE)
+                if etiq_match:
+                    num_completo = etiq_match.group(1).strip()
+                    final_etiq = num_completo[-2:]
+                else:
+                    final_etiq = "00"
+                
+                # Formata a linha no padrão exato que o Circuit lê de primeira
+                lista_enderecos.append(f"{endereco}, CEP: {cep_limpo}".strip(", CEP: ") if cep_limpo else endereco)
+                lista_finais_etiqueta.append(f"Final Etiqueta: {final_etiq}")
+                lista_quantidades.append(f"Qtd: {quantidade} vol")
+                
+            except Exception as e:
+                st.warning(f"Erro ao ler uma das imagens da galeria.")
+                continue
+                
+            barra_progresso.progress((i + 1) / total)
             
-            csv_data = df.to_csv(index=False, sep=',').encode('utf-8')
+        if lista_enderecos:
+            # Monta o DataFrame com os nomes de colunas que o Circuit reconhece no celular
+            df = pd.DataFrame({
+                "Street Address": lista_enderecos,
+                "First Name": lista_finais_etiqueta,
+                "Notes": lista_quantidades
+            })
+            
+            st.success(f"✓ {len(df)} paradas processadas!")
+            st.dataframe(df, use_container_width=True)
+            
+            # Converte para download
+            csv_data = df.to_csv(index=False, encoding='utf-8').encode('utf-8')
+            
+            # Botão de download gigante para o celular
             st.download_button(
-                label="📥 BAIXAR ARQUIVO PARA O CIRCUIT",
+                label="📥 Baixar Roteiro e Abrir no Circuit",
                 data=csv_data,
-                file_name="lista_etiqueta_no_endereco.csv",
-                mime="text/csv"
+                file_name="rotas_celular.csv",
+                mime="text/csv",
+                use_container_width=True
             )
+    else:
+        st.warning("Selecione ao menos um print na galeria.")
+
