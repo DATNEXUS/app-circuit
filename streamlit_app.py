@@ -2,47 +2,51 @@ import streamlit as st
 import pandas as pd
 import re
 from PIL import Image
-import pytesseract
-import shutil
+import numpy as np
+import easyocr
 
-# Configura a página de forma responsiva para o celular
 st.set_page_config(page_title="Leitor de Rotas", layout="centered", page_icon="📱")
 
 st.title("📱 Leitor de Prints para Roteiros")
-st.write("Selecione os prints da galeria (um por vez ou juntos).")
+st.write("Selecione os prints da galeria (juntos ou um por vez).")
 
-# Vincula o executável do tesseract de forma limpa no servidor Linux
-pytesseract.pytesseract.tesseract_cmd = shutil.which("tesseract")
+# Inicializa o leitor de imagem direto pelo Python em português (Evita erros de sistema)
+@st.cache_resource
+def iniciar_leitor():
+    return easyocr.Reader(['pt'], gpu=False)
 
-# Inicializa o banco de dados temporário na memória do app se não existir
+try:
+    reader = iniciar_leitor()
+except Exception as e:
+    st.error(f"Erro ao inicializar o motor de leitura: {e}")
+
+# Inicializa o banco de dados temporário na memória do app
 if 'lista_paradas' not in st.session_state:
     st.session_state.lista_paradas = []
 
-# MUDANÇA CRUCIAL: 'type=None' remove as restrições que travam o upload no celular
+# Campo de upload flexível para celulares
 arquivos_prints = st.file_uploader(
     "Toque abaixo para abrir sua Galeria:", 
-    type=None, 
-    accept_multiple_files=True,
-    key="leitor_celular"
+    type=["png", "jpg", "jpeg"], 
+    accept_multiple_files=True
 )
 
 if st.button("🚀 Processar Lote e Gerar CSV", use_container_width=True):
     if arquivos_prints:
-        # Reinicia o acumulador para evitar duplicar dados antigos
         st.session_state.lista_paradas = []
-        
         progresso = st.progress(0)
         total = len(arquivos_prints)
         
         for i, arquivo in enumerate(arquivos_prints):
             try:
-                # Carrega o arquivo de imagem reduzindo o consumo de RAM do celular
+                # Carrega o arquivo de imagem de forma segura
                 with Image.open(arquivo) as imagem:
-                    # Converte para escala de cinza para acelerar o motor de IA em 3x
-                    imagem_otimizada = imagem.convert('L')
-                    texto_completo = pytesseract.image_to_string(imagem_otimizada, lang='por')
+                    imagem_np = np.array(imagem)
+                    # Faz a leitura do texto contido no print
+                    resultado = reader.readtext(imagem_np, detail=0)
                 
-                # Separa os blocos por seção de entrega
+                texto_completo = "\n".join(resultado)
+                # Divide o print pelas seções de cada entrega
                 blocos = texto_completo.split("Estou chegando")
                 
                 for bloco in blocos:
@@ -72,7 +76,8 @@ if st.button("🚀 Processar Lote e Gerar CSV", use_container_width=True):
                             "First Name": f"Final: {final_etiq}",
                             "Notes": f"Qtd: {qtd} vol"
                         })
-            except Exception:
+            except Exception as e:
+                st.sidebar.error(f"Erro no arquivo {arquivo.name}: {e}")
                 continue
             
             progresso.progress((i + 1) / total)
@@ -80,7 +85,7 @@ if st.button("🚀 Processar Lote e Gerar CSV", use_container_width=True):
         if st.session_state.lista_paradas:
             st.success(f"✓ {len(st.session_state.lista_paradas)} endereços processados!")
         else:
-            st.error("Nenhum dado legível foi extraído. Verifique se o print possui boa nitidez.")
+            st.error("Nenhum dado legível foi extraído. Verifique os arquivos selecionados.")
     else:
         st.warning("Por favor, selecione as fotos na galeria antes de clicar.")
 
