@@ -88,4 +88,3 @@ if all_uploaded_files:
                 file_name="lista_etiqueta_no_endereco.csv",
                 mime="text/csv"
             )
-
