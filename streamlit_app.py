@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import google.generativeai as genai
@@ -11,7 +12,6 @@ st.write("Transforme prints de entrega no arquivo correto para o Circuit instant
 
 api_key = st.text_input("Cole sua Gemini API Key aqui:", type="password")
 uploaded_files = st.file_uploader("Selecione ou tire foto dos prints:", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
-= st.file_uploader("Selecione ou tire foto dos prints:", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
 
 if uploaded_files:
     if not api_key:
