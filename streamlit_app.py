@@ -179,29 +179,23 @@ def extrair_quantidade(texto):
 
 def extrair_final_etiqueta(texto):
     """
-    Procura códigos longos ou códigos separados por "_" e retorna
-    somente os 2 últimos dígitos, conforme o padrão usado no projeto.
+    Extrai o número da etiqueta.
+    Se houver "_", usa TODOS os dígitos depois dele,
+    preservando zeros à esquerda.
     """
     texto = str(texto or "")
 
-    # Prioridade para códigos que tenham "_".
     if "_" in texto:
-        grupos = re.findall(r"\d+", texto)
+        parte_depois = texto.split("_", 1)[1]
+        grupos = re.findall(r"\d+", parte_depois)
         if grupos:
-            numero = grupos[-1]
-            if len(numero) >= 2:
-                return numero[-2:]
-            return numero
+            return grupos[0]
 
-    # Procura sequências de pelo menos 6 dígitos.
     numeros = re.findall(r"\d{6,}", texto)
-
     if numeros:
-        numero = max(numeros, key=len)
-        return numero[-2:]
+        return max(numeros, key=len)
 
     return ""
-
 
 # ============================================================
 # IDENTIFICAÇÃO DE ENDEREÇO
@@ -612,6 +606,98 @@ if st.session_state.lista_paradas:
     # Garante a ordem esperada pelo arquivo.
     colunas = ["Street Address", "First Name", "Notes"]
     df_final = df_final[[c for c in colunas if c in df_final.columns]]
+
+    # --------------------------------------------------------
+    # VISUALIZAÇÃO — NÚMEROS GRANDES NO CANTO DIREITO
+    # --------------------------------------------------------
+
+    st.markdown(
+        """
+        <style>
+        .rota-card {
+            border: 1px solid rgba(128,128,128,.35);
+            border-radius: 14px;
+            padding: 16px 12px 16px 16px;
+            margin: 10px 0;
+            min-height: 118px;
+        }
+        .rota-linha {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            gap: 12px;
+        }
+        .rota-endereco {
+            flex: 1;
+            min-width: 0;
+            font-size: 17px;
+            line-height: 1.35;
+            font-weight: 700;
+            padding-right: 8px;
+        }
+        .rota-numeros {
+            width: 145px;
+            flex-shrink: 0;
+            text-align: right;
+            border-left: 1px solid rgba(128,128,128,.35);
+            padding-left: 12px;
+        }
+        .rota-mini-titulo {
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 1px;
+            margin-top: 3px;
+            margin-bottom: 1px;
+            color: #ffd21c;
+        }
+        .rota-numero-amarelo {
+            color: #ffd21c;
+            font-size: 42px;
+            font-weight: 900;
+            line-height: .95;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+        .rota-separador {
+            height: 1px;
+            background: rgba(128,128,128,.25);
+            margin: 8px 0 0 0;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+    for _, linha in df_final.iterrows():
+        etiqueta = str(linha.get("First Name", "")).replace("FINAL:", "").strip()
+        quantidade = (
+            str(linha.get("Notes", ""))
+            .replace("Qtd:", "")
+            .replace("vol", "")
+            .strip()
+        )
+        endereco = str(linha.get("Street Address", ""))
+
+        st.markdown(
+            f"""
+            <div class="rota-card">
+                <div class="rota-linha">
+                    <div class="rota-endereco">📍 {endereco}</div>
+
+                    <div class="rota-numeros">
+                        <div class="rota-mini-titulo">PACOTES</div>
+                        <div class="rota-numero-amarelo">{quantidade}</div>
+
+                        <div class="rota-mini-titulo">ETIQUETA</div>
+                        <div class="rota-numero-amarelo">{etiqueta}</div>
+                    </div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    st.caption("A tabela técnica do CSV continua abaixo, com os mesmos dados.")
 
     st.dataframe(
         df_final,
